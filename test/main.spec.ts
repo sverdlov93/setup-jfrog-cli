@@ -2,6 +2,7 @@ import * as os from 'os';
 import * as core from '@actions/core';
 
 import { Utils, DownloadDetails, JfrogCredentials, JWTTokenData } from '../src/utils';
+import { tmpdir } from 'os';
 jest.mock('os');
 jest.mock('@actions/core');
 
@@ -298,7 +299,7 @@ describe('decodeOidcToken', () => {
 describe('Job Summaries', () => {
     describe('Job summaries sanity', () => {
         it('should not crash if no files were found', async () => {
-            expect(async () => await Utils.generateWorkflowSummaryMarkdown()).not.toThrow();
+            expect(async () => await Utils.setMarkdownAsJobSummary()).not.toThrow();
         });
     });
     describe('Command Summaries Disable Flag', () => {
@@ -327,22 +328,40 @@ describe('Job Summaries', () => {
             Utils.setCliEnv();
             expect(process.env[Utils.JFROG_CLI_COMMAND_SUMMARY_OUTPUT_DIR_ENV]).toBe('/tmp');
         });
-    });
-});
 
-describe('isColorSchemeSupported', () => {
-    it('should return true if GITHUB_SERVER_URL includes github.com', () => {
-        process.env.GITHUB_SERVER_URL = 'https://github.com';
-        expect(Utils.isColorSchemeSupported()).toBe(true);
-    });
+        it('should handle self-hosted machines and set JFROG_CLI_COMMAND_SUMMARY_OUTPUT_DIR based on OS temp dir', () => {
+            // Mock os.tmpdir() to simulate different OS temp directories
+            const tempDir: string = '/mocked-temp-dir';
+            jest.spyOn(os, 'tmpdir').mockReturnValue(tempDir);
 
-    it('should return false if GITHUB_SERVER_URL does not include github.com', () => {
-        process.env.GITHUB_SERVER_URL = 'https://enterprise.github.com';
-        expect(Utils.isColorSchemeSupported()).toBe(false);
-    });
+            myCore.getBooleanInput = jest.fn().mockImplementation(() => {
+                return false;
+            });
+            myCore.exportVariable = jest.fn().mockImplementation((name: string, val: string) => {
+                process.env[name] = val;
+            });
 
-    it('should return false if GITHUB_SERVER_URL is undefined', () => {
-        delete process.env.GITHUB_SERVER_URL;
-        expect(Utils.isColorSchemeSupported()).toBe(false);
+            Utils.setCliEnv();
+
+            expect(process.env[Utils.JFROG_CLI_COMMAND_SUMMARY_OUTPUT_DIR_ENV]).toBe(tempDir);
+        });
+
+        it('Should throw error when failing to get temp dir', () => {
+            // Mock os.tmpdir() to return an empty string
+            jest.spyOn(os, 'tmpdir').mockReturnValue('');
+
+            myCore.getBooleanInput = jest.fn().mockImplementation(() => {
+                return false;
+            });
+            myCore.exportVariable = jest.fn().mockImplementation((name: string, val: string) => {
+                process.env[name] = val;
+            });
+
+            // Expect the function to throw an error
+            expect(() => Utils.setCliEnv()).toThrow('Failed to determine the temporary directory');
+
+            // Restore the mock to avoid affecting other tests
+            jest.restoreAllMocks();
+        });
     });
 });

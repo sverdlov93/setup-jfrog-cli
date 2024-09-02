@@ -6,6 +6,7 @@ async function cleanup() {
         core.error('Could not find JFrog CLI path in the step state. Skipping cleanup.');
         return;
     }
+    // Auto-publish build info if needed
     try {
         if (!core.getBooleanInput(Utils.AUTO_BUILD_PUBLISH_DISABLE)) {
             await collectAndPublishBuildInfoIfNeeded();
@@ -13,13 +14,21 @@ async function cleanup() {
     } catch (error) {
         core.warning('failed while attempting to publish build info: ' + error);
     }
-
+    // Generate job summary
+    try {
+        if (!core.getBooleanInput(Utils.JOB_SUMMARY_DISABLE)) {
+            core.startGroup('Generating Job Summary');
+            await Utils.runCli(['generate-summary-markdown']);
+            await Utils.setMarkdownAsJobSummary();
+            core.endGroup();
+        }
+    } catch (error) {
+        core.warning('failed while attempting to generate job summary: ' + error);
+    }
+    // Cleanup JFrog CLI servers configuration
     try {
         core.startGroup('Cleanup JFrog CLI servers configuration');
         await Utils.removeJFrogServers();
-        if (!core.getBooleanInput(Utils.JOB_SUMMARY_DISABLE)) {
-            await Utils.generateWorkflowSummaryMarkdown();
-        }
     } catch (error) {
         core.setFailed((<any>error).message);
     } finally {
